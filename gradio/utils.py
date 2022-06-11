@@ -12,12 +12,16 @@ import random
 import warnings
 from copy import deepcopy
 from distutils.version import StrictVersion
-from typing import TYPE_CHECKING, Any, Callable, Dict, List
+from enum import Enum
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Type
 
 import aiohttp
 import analytics
+import httpx
 import pkg_resources
 import requests
+from httpx import AsyncClient, Response
+from pydantic import BaseModel, parse_obj_as, Json
 
 import gradio
 
@@ -107,7 +111,7 @@ async def log_feature_analytics(ip_address: str, feature: str) -> None:
     async with aiohttp.ClientSession() as session:
         try:
             async with session.post(
-                analytics_url + "gradio-feature-analytics/", data=data
+                    analytics_url + "gradio-feature-analytics/", data=data
             ):
                 pass
         except (aiohttp.ClientError):
@@ -240,9 +244,9 @@ def get_config_file(interface: Interface) -> Dict[str, Any]:
                 )
             if len(interface.predict) > 1:
                 component["label"] = (
-                    interface.function_names[function_index].replace("_", " ")
-                    + ": "
-                    + component["label"]
+                        interface.function_names[function_index].replace("_", " ")
+                        + ": "
+                        + component["label"]
                 )
     except ValueError:
         pass
@@ -270,10 +274,10 @@ def get_config_file(interface: Interface) -> Dict[str, Any]:
                     examples = examples[1:]  # remove header
             for i, example in enumerate(examples):
                 for j, (component, cell) in enumerate(
-                    zip(
-                        interface.input_components + interface.output_components,
-                        example,
-                    )
+                        zip(
+                            interface.input_components + interface.output_components,
+                            example,
+                        )
                 ):
                     examples[i][j] = component.restore_flagged(
                         interface.flagging_dir,
@@ -337,7 +341,7 @@ def assert_configs_are_equivalent_besides_ids(config1, config2):
     return True
 
 
-def format_ner_list(input_string: str, ner_groups: Dict[str : str | int]):
+def format_ner_list(input_string: str, ner_groups: Dict[str: str | int]):
     if len(ner_groups) == 0:
         return [(input_string, None)]
 
@@ -370,3 +374,105 @@ def delete_none(_dict):
         _dict = type(_dict)(delete_none(item) for item in _dict if item is not None)
 
     return _dict
+
+
+class Request:
+    class Method(str, Enum):
+        ANY: str = "*"
+        CONNECT: str = "CONNECT"
+        HEAD: str = "HEAD"
+        GET: str = "GET"
+        DELETE: str = "DELETE"
+        OPTIONS: str = "OPTIONS"
+        PATCH: str = "PATCH"
+        POST: str = "POST"
+        PUT: str = "PUT"
+        TRACE: str = "TRACE"
+
+    def __await__(self):
+        return self.__run().__await__()
+
+    def __init__(self,
+                 method: Method,
+                 url: str,
+                 *,
+                 validation_model: Type[BaseModel] = None,
+                 validation_function: Callable = None,
+                 exception_class: Type[Exception] = Exception,
+                 raise_for_status: bool = False,
+                 **kwargs):
+        # Init request params.
+        self._response = None
+        self._exception = None
+        self.status = None
+
+        self.client = AsyncClient()
+        self.request = self._create_request(method, url, **kwargs)
+        self.raise_for_status = raise_for_status
+        self.validation_model = validation_model
+        self.validation_function = validation_function
+        self.exception_class = exception_class
+
+    @staticmethod
+    def _create_request(method: Method,
+                        url: str,
+                        **kwargs):
+        headers = kwargs.pop('headers', {})
+        request = httpx.Request(method, url, headers=headers, **kwargs)
+        return request
+
+    def _validate(self, response):
+        if self.validation_model:
+            validated_data = parse_obj_as(self.validation_model, response)
+        elif self.validation_function:
+            validated_data = self.validation_function(response)
+        else:
+            # If there is no validation method, use response
+            validated_data = response
+        return validated_data
+
+    async def __run(self) -> Request:
+        """
+        A function to make request, validate and serialize
+        """
+        try:
+            # Make request call
+            async with httpx.AsyncClient() as client:
+                response: Response = await client.send(self.request)
+            # Raise for status
+            self.status = response.status_code
+            if self.raise_for_status:
+                response.raise_for_status()
+            # Parse client response to JSON
+            response_json = response.json()
+            # Validate data
+            self._validated_data = self._validate(response_json)
+        except Exception as exception:
+            self._exception = self.exception_class(exception)
+        return self
+
+    @property
+    def validated_data(self):
+        return self._validated_data
+
+    @property
+    def exception(self):
+        return self._exception
+
+    @property
+    def has_exception(self):
+        return self.exception is not None
+
+    @property
+    def raise_exceptions(self):
+        if self.has_exception:
+            raise self._exception
+
+    def is_valid(self, raise_exceptions: bool = False):
+        if not self.has_exception:
+            return True
+        else:
+            if raise_exceptions:
+                raise self._exception
+            else:
+                return False

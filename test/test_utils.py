@@ -6,6 +6,9 @@ import warnings
 
 import pkg_resources
 import requests
+import pytest
+from pydantic import BaseModel
+from pydantic.typing import Literal
 
 from gradio.test_data.blocks_configs import (
     XRAY_CONFIG,
@@ -24,6 +27,7 @@ from gradio.utils import (
     launch_analytics,
     readme_to_html,
     version_check,
+    Request,
 )
 
 os.environ["GRADIO_ANALYTICS_ENABLED"] = "False"
@@ -182,6 +186,77 @@ class TestDeleteNone(unittest.TestCase):
         }
         truth = {"a": 12, "b": 34, "k": {"d": 34, "m": [{"k": 23}, [1, 2, 3], {1, 2}]}}
         self.assertEqual(delete_none(input), truth)
+
+
+class TestRequest:
+    @pytest.mark.asyncio
+    async def test_get(self):
+        client_response: Request = await Request(method=Request.Method.GET,
+                                                 url="http://headers.jsontest.com/",
+                                                 )
+        response = {}
+        if client_response.is_valid():
+            response = client_response.validated_data
+        assert response["Host"] == "headers.jsontest.com"
+
+    @pytest.mark.asyncio
+    async def test_post(self):
+        client_response: Request = await Request(method=Request.Method.POST,
+                                                 url="https://reqres.in/api/users",
+                                                 json={"name": "morpheus", "job": "leader"}
+                                                 )
+        validated_data = client_response.validated_data
+        assert client_response.status == 201
+        assert validated_data["job"] == "leader"
+        assert validated_data["name"] == "morpheus"
+
+    @pytest.mark.asyncio
+    async def test_validate_with_model(self):
+        class TestModel(BaseModel):
+            name: str
+            job: str
+            id: str
+            createdAt: str
+
+        client_response: Request = await Request(method=Request.Method.POST,
+                                                 url="https://reqres.in/api/users",
+                                                 json={"name": "morpheus", "job": "leader"},
+                                                 validation_model=TestModel
+                                                 )
+        assert isinstance(client_response.validated_data, TestModel)
+
+    @pytest.mark.asyncio
+    async def test_validate_and_fail_with_model(self):
+        class TestModel(BaseModel):
+            name: Literal[str] = "John"
+            job: str
+
+        client_response: Request = await Request(method=Request.Method.POST,
+                                                 url="https://reqres.in/api/users",
+                                                 json={"name": "morpheus", "job": "leader"},
+                                                 validation_model=TestModel
+                                                 )
+        with pytest.raises(Exception):
+            client_response.is_valid(raise_exceptions=True)
+        assert client_response.has_exception == True
+        assert isinstance(client_response.exception, Exception)
+
+    @pytest.mark.asyncio
+    async def test_validate_with_function(self):
+        def has_name(response):
+            if response["name"] is not None:
+                if isinstance(response["name"], str):
+                    return response
+            return None
+
+        client_response: Request = await Request(method=Request.Method.POST,
+                                                 url="https://reqres.in/api/users",
+                                                 json={"name": "morpheus", "job": "leader"},
+                                                 validation_function=has_name
+                                                 )
+        assert client_response.is_valid() is True
+        assert client_response.validated_data['id'] is not None
+        assert client_response.exception is None
 
 
 if __name__ == "__main__":
