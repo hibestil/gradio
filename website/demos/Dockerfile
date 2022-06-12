@@ -8,11 +8,13 @@ WORKDIR /gradio
 COPY ./gradio ./gradio
 COPY ./setup.py ./setup.py
 COPY ./MANIFEST.in ./MANIFEST.in
+COPY ./README.md ./README.md
 RUN python setup.py install
 WORKDIR /gradio
 COPY ./website ./website
 COPY ./demo ./demo
 COPY ./guides ./guides
+COPY ./gradio/components.py ./gradio/components.py
 WORKDIR /gradio/website/demos
 RUN pip install -r requirements.txt
 RUN python map_demos.py

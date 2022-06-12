@@ -2,6 +2,7 @@
 
 related_spaces: https://huggingface.co/spaces/abidlabs/chatbot-minimal, https://huggingface.co/spaces/ThomasSimonini/Chat-with-Gandalf-GPT-J6B, https://huggingface.co/spaces/gorkemgoknar/moviechatbot, https://huggingface.co/spaces/Kirili4ik/chat-with-Kirill
 tags: NLP, TEXT, HTML
+Docs: textbox, state
 
 ## Introduction
 
@@ -81,7 +82,7 @@ import gradio as gr
 
 gr.Interface(fn=predict,
              inputs=["text", "state"],
-             outputs=["text", "state"]).launch()
+             outputs=["chatbot", "state"]).launch()
 ```
 
 This produces the following interface, which you can try right here in your browser (try typing in some simple greetings like "Hi!" to get started):

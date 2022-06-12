@@ -13,6 +13,7 @@ export const component_map: Record<string, any> = {
 	file: () => import("./File"),
 	statustracker: () => import("./StatusTracker"),
 	highlightedtext: () => import("./HighlightedText"),
+	gallery: () => import("./Gallery"),
 	html: () => import("./HTML"),
 	image: () => import("./Image"),
 	interpretation: () => import("./Interpretation"),
@@ -30,5 +31,7 @@ export const component_map: Record<string, any> = {
 	video: () => import("./Video"),
 	model3d: () => import("./Model3D"),
 	plot: () => import("./Plot"),
-	variable: () => import("./Variable")
+	variable: () => import("./Variable"),
+	group: () => import("./Group"),
+	box: () => import("./Box")
 };

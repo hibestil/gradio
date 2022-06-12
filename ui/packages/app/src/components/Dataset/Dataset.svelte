@@ -5,12 +5,13 @@
 	export let components: Array<string>;
 	export let headers: Array<string>;
 	export let samples: Array<Array<any>>;
+	export let elem_id: string = "";
+	export let visible: boolean = true;
 	export let value: Number | null = null;
 	export let root: string;
 	export let samples_per_page: number = 10;
 
 	export let theme: string;
-	export let style: string = "";
 
 	const dispatch = createEventDispatcher<{ click: number }>();
 
@@ -51,16 +52,33 @@
 </script>
 
 <div
-	class="samples-holder mt-4 inline-block max-w-full"
-	class:gallery
-	class:overflow-x-auto={!gallery}
+	id={elem_id}
+	class:hidden={visible === false}
+	class="mt-4 inline-block max-w-full text-gray-700 w-full"
 >
+	<div class="text-xs mb-2 flex items-center text-gray-500">
+		<svg
+			xmlns="http://www.w3.org/2000/svg"
+			xmlns:xlink="http://www.w3.org/1999/xlink"
+			aria-hidden="true"
+			role="img"
+			class="mr-1"
+			width="1em"
+			height="1em"
+			preserveAspectRatio="xMidYMid meet"
+			viewBox="0 0 32 32"
+			><path
+				fill="currentColor"
+				d="M10 6h18v2H10zm0 18h18v2H10zm0-9h18v2H10zm-6 0h2v2H4zm0-9h2v2H4zm0 18h2v2H4z"
+			/></svg
+		>
+		Examples
+	</div>
 	{#if gallery}
-		<div class="samples-gallery flex gap-2 flex-wrap">
+		<div class="gr-samples-gallery">
 			{#each selected_samples as sample_row, i}
 				<button
-					class="sample cursor-pointer p-2 rounded bg-gray-50 dark:bg-gray-700 transition"
-					class:selected={i + page * samples_per_page === sample_id}
+					class="group rounded-lg"
 					on:click={() => {
 						value = i;
 						dispatch("click", i + page * samples_per_page);
@@ -76,53 +94,53 @@
 			{/each}
 		</div>
 	{:else}
-		<table
-			class="samples-table table-auto p-2 bg-gray-50 dark:bg-gray-600 rounded max-w-full border-collapse"
-		>
-			<thead class="border-b-2 dark:border-gray-600">
-				<tr>
-					{#each headers as header}
-						<th class="py-2 px-4">
-							{header}
-						</th>
-					{/each}
-				</tr>
-			</thead>
-			<tbody>
-				{#each selected_samples as sample_row, i}
+		<div class="overflow-x-auto border table-auto rounded-lg w-full text-sm">
+			<table class="gr-samples-table">
+				<thead>
 					<tr
-						class="cursor-pointer transition"
-						class:selected={i + page * samples_per_page === sample_id}
-						on:click={() => {
-							value = i;
-							dispatch("click", i + page * samples_per_page);
-						}}
+						class="border-b dark:border-gray-800 divide-x dark:divide-gray-800 shadow-sm"
 					>
-						{#each sample_row as sample_cell, j}
-							<td class="py-2 px-4">
-								<svelte:component
-									this={component_map[components[j]]}
-									{theme}
-									value={sample_cell}
-									{samples_dir}
-								/>
-							</td>
+						{#each headers as header}
+							<th class="p-2 whitespace-nowrap min-w-lg text-left">
+								{header}
+							</th>
 						{/each}
 					</tr>
-				{/each}
-			</tbody>
-		</table>
+				</thead>
+				<tbody>
+					{#each selected_samples as sample_row, i}
+						<tr
+							class="group cursor-pointer odd:bg-gray-50 border-b dark:border-gray-800 divide-x dark:divide-gray-800 last:border-none hover:bg-orange-50 hover:divide-orange-100 dark:hover:bg-gray-700"
+							on:click={() => {
+								value = i;
+								dispatch("click", i + page * samples_per_page);
+							}}
+						>
+							{#each sample_row as sample_cell, j}
+								<td class="p-2">
+									<svelte:component
+										this={component_map[components[j]]}
+										{theme}
+										value={sample_cell}
+										{samples_dir}
+									/>
+								</td>
+							{/each}
+						</tr>
+					{/each}
+				</tbody>
+			</table>
+		</div>
 	{/if}
 </div>
 {#if paginate}
-	<div class="flex gap-2 items-center mt-4">
+	<div class="flex gap-2 items-center justify-center text-sm">
 		Pages:
 		{#each visible_pages as visible_page}
 			{#if visible_page === -1}
 				<div>...</div>
 			{:else}
 				<button
-					class="page"
 					class:font-bold={page === visible_page}
 					on:click={() => (page = visible_page)}
 				>
@@ -132,32 +150,3 @@
 		{/each}
 	</div>
 {/if}
-
-<style lang="postcss" global>
-	.samples-holder:not(.gallery) {
-		@apply shadow;
-		.samples-table {
-			@apply rounded dark:bg-gray-700;
-			thead {
-				@apply border-gray-300 dark:border-gray-600;
-			}
-			tbody tr:hover {
-				@apply bg-amber-500 dark:bg-red-700 text-white;
-			}
-		}
-	}
-	.samples-holder .samples-gallery {
-		.sample {
-			@apply shadow;
-		}
-		.sample:hover {
-			@apply bg-amber-500 text-white;
-		}
-	}
-	.samples-table tr.selected {
-		@apply font-semibold;
-	}
-	.page {
-		@apply py-1 px-2 bg-gray-100 dark:bg-gray-700 rounded;
-	}
-</style>

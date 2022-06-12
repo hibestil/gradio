@@ -1,9 +1,10 @@
 <script lang="ts">
 	import { Tabs } from "@gradio/tabs";
 
-	export let style: string = "";
+	export let elem_id: string = "";
+	export let visible: boolean = true;
 </script>
 
-<Tabs on:change {style}>
+<Tabs {elem_id} {visible} on:change>
 	<slot />
 </Tabs>

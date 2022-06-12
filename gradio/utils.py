@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-import copy
-import csv
+import asyncio
 import inspect
 import json
 import json.decoder
 import os
 import random
+import sys
 import warnings
 from copy import deepcopy
 from distutils.version import StrictVersion
@@ -26,7 +26,9 @@ from pydantic import BaseModel, parse_obj_as, Json
 import gradio
 
 if TYPE_CHECKING:  # Only import for type checking (is False at runtime).
-    from gradio import Interface
+    from gradio import Blocks, Interface
+    from gradio.blocks import BlockContext
+    from gradio.components import Component
 
 analytics_url = "https://api.gradio.app/"
 PKG_VERSION_URL = "https://api.gradio.app/pkg-version"
@@ -111,7 +113,7 @@ async def log_feature_analytics(ip_address: str, feature: str) -> None:
     async with aiohttp.ClientSession() as session:
         try:
             async with session.post(
-                    analytics_url + "gradio-feature-analytics/", data=data
+                analytics_url + "gradio-feature-analytics/", data=data
             ):
                 pass
         except (aiohttp.ClientError):
@@ -161,7 +163,7 @@ def readme_to_html(article: str) -> str:
     return article
 
 
-def show_tip(interface: Interface) -> None:
+def show_tip(interface: gradio.Blocks) -> None:
     if interface.show_tips and random.random() < 1.5:
         tip: str = random.choice(gradio.strings.en["TIPS"])
         print(f"Tip: {tip}")
@@ -177,118 +179,12 @@ def launch_counter() -> None:
             with open(JSON_PATH) as j:
                 launches = json.load(j)
             launches["launches"] += 1
-            if launches["launches"] in [25, 50]:
+            if launches["launches"] in [25, 50, 150, 500, 1000]:
                 print(gradio.strings.en["BETA_INVITE"])
             with open(JSON_PATH, "w") as j:
                 j.write(json.dumps(launches))
     except:
         pass
-
-
-def get_config_file(interface: Interface) -> Dict[str, Any]:
-    config = {
-        "input_components": [
-            iface.get_template_context() for iface in interface.input_components
-        ],
-        "output_components": [
-            iface.get_template_context() for iface in interface.output_components
-        ],
-        "function_count": len(interface.predict),
-        "live": interface.live,
-        "examples_per_page": interface.examples_per_page,
-        "layout": interface.layout,
-        "show_input": interface.show_input,
-        "show_output": interface.show_output,
-        "title": interface.title,
-        "analytics_enabled": interface.analytics_enabled,
-        "description": interface.description,
-        "simple_description": interface.simple_description,
-        "article": interface.article,
-        "theme": interface.theme,
-        "css": interface.css,
-        "thumbnail": interface.thumbnail,
-        "allow_screenshot": interface.allow_screenshot,
-        "allow_flagging": interface.allow_flagging,
-        "flagging_options": interface.flagging_options,
-        "allow_interpretation": interface.interpretation is not None,
-        "queue": interface.enable_queue,
-        "cached_examples": interface.cache_examples
-        if hasattr(interface, "cache_examples")
-        else False,
-        "version": pkg_resources.require("gradio")[0].version,
-        "favicon_path": interface.favicon_path,
-    }
-    try:
-        param_names = inspect.getfullargspec(interface.predict[0])[0]
-        for index, component in enumerate(config["input_components"]):
-            if not component["label"]:
-                if index < len(param_names):
-                    component["label"] = param_names[index].replace("_", " ")
-                else:
-                    component["label"] = (
-                        f"input {index + 1}"
-                        if len(config["input_components"]) > 1
-                        else "input"
-                    )
-        for index, component in enumerate(config["output_components"]):
-            outputs_per_function = int(
-                len(interface.output_components) / len(interface.predict)
-            )
-            function_index = index // outputs_per_function
-            component_index = index - function_index * outputs_per_function
-            if component["label"] is None:
-                component["label"] = (
-                    f"output {component_index + 1}"
-                    if outputs_per_function > 1
-                    else "output"
-                )
-            if len(interface.predict) > 1:
-                component["label"] = (
-                        interface.function_names[function_index].replace("_", " ")
-                        + ": "
-                        + component["label"]
-                )
-    except ValueError:
-        pass
-    if interface.examples is not None:
-        if isinstance(interface.examples, str):
-            if not os.path.exists(interface.examples):
-                raise FileNotFoundError(
-                    "Could not find examples directory: " + interface.examples
-                )
-            log_file = os.path.join(interface.examples, "log.csv")
-            if not os.path.exists(log_file):
-                if len(interface.input_components) == 1:
-                    examples = [
-                        [os.path.join(interface.examples, item)]
-                        for item in os.listdir(interface.examples)
-                    ]
-                else:
-                    raise FileNotFoundError(
-                        "Could not find log file (required for multiple inputs): "
-                        + log_file
-                    )
-            else:
-                with open(log_file) as logs:
-                    examples = list(csv.reader(logs))
-                    examples = examples[1:]  # remove header
-            for i, example in enumerate(examples):
-                for j, (component, cell) in enumerate(
-                        zip(
-                            interface.input_components + interface.output_components,
-                            example,
-                        )
-                ):
-                    examples[i][j] = component.restore_flagged(
-                        interface.flagging_dir,
-                        cell,
-                        interface.encryption_key if interface.encrypt else None,
-                    )
-            config["examples"] = examples
-            config["examples_dir"] = interface.examples
-        else:
-            config["examples"] = interface.examples
-    return config
 
 
 def get_default_args(func: Callable) -> Dict[str, Any]:
@@ -336,12 +232,11 @@ def assert_configs_are_equivalent_besides_ids(config1, config2):
             assert mapping[i1] == i2, "{} does not match {}".format(d1, d2)
         for o1, o2 in zip(d1["outputs"], d2["outputs"]):
             assert mapping[o1] == o2, "{} does not match {}".format(d1, d2)
-        assert d1["queue"] == d2["queue"], "{} does not match {}".format(d1, d2)
 
     return True
 
 
-def format_ner_list(input_string: str, ner_groups: Dict[str: str | int]):
+def format_ner_list(input_string: str, ner_groups: Dict[str : str | int]):
     if len(ner_groups) == 0:
         return [(input_string, None)]
 
@@ -361,7 +256,7 @@ def format_ner_list(input_string: str, ner_groups: Dict[str: str | int]):
 def delete_none(_dict):
     """
     Delete None values recursively from all of the dictionaries, tuples, lists, sets.
-    Credit: https://stackoverflow.com/questions/33797126/proper-way-to-remove-keys-in-dictionary-with-none-values-in-python
+    Credit: https://stackoverflow.com/a/66127889/5209347
     """
     if isinstance(_dict, dict):
         for key, value in list(_dict.items()):
@@ -374,6 +269,57 @@ def delete_none(_dict):
         _dict = type(_dict)(delete_none(item) for item in _dict if item is not None)
 
     return _dict
+
+
+def resolve_singleton(_list):
+    if len(_list) == 1:
+        return _list[0]
+    else:
+        return _list
+
+
+def component_or_layout_class(cls_name: str) -> Component | BlockContext:
+    """
+    Returns the component, template, or layout class with the given class name, or
+    raises a ValueError if not found.
+
+    Parameters:
+    cls_name (str): lower-case string class name of a component
+    Returns:
+    cls: the component class
+    """
+    import gradio.components
+    import gradio.layouts
+    import gradio.templates
+
+    components = [
+        (name, cls)
+        for name, cls in gradio.components.__dict__.items()
+        if isinstance(cls, type)
+    ]
+    templates = [
+        (name, cls)
+        for name, cls in gradio.templates.__dict__.items()
+        if isinstance(cls, type)
+    ]
+    layouts = [
+        (name, cls)
+        for name, cls in gradio.layouts.__dict__.items()
+        if isinstance(cls, type)
+    ]
+    for name, cls in components + templates + layouts:
+        if name.lower() == cls_name.replace("_", "") and (
+            issubclass(cls, gradio.components.Component)
+            or issubclass(cls, gradio.blocks.BlockContext)
+        ):
+            return cls
+    raise ValueError(f"No such component or layout: {cls_name}")
+
+
+def synchronize_async(func: Callable, *args: object, callback_func: Callable = None):
+    event_loop = asyncio.get_event_loop()
+    task = event_loop.create_task(func(*args))
+    task.add_done_callback(callback_func)
 
 
 class Http:
