@@ -395,6 +395,7 @@ class Http:
 
 class Request:
     class Method(str, Enum):
+        """An enum class that contains the possible types of Request method strings."""
         ANY: str = "*"
         CONNECT: str = "CONNECT"
         HEAD: str = "HEAD"
@@ -431,11 +432,11 @@ class Request:
         self.exception_class = exception_class
 
     def __await__(self):
+        """Define request's awaited behaviour"""
         return self.__run().__await__()
 
     async def __run(self) -> Request:
-        """
-        A function to make request, validate and serialize
+        """ A function to make request, validate and serialize
         """
         try:
             # Make request call
@@ -447,10 +448,11 @@ class Request:
             if self._raise_for_status:
                 response.raise_for_status()
             # Parse client response to JSON
-            response_json = response.json()
+            self._json = response.json()
             # Validate data
-            self._validated_data = self._validate(response_json)
+            self._validated_data = self._validate(self._json)
         except Exception as exception:
+            # If there is an exception, store it in an attribute
             self._exception = self._exception_class(exception)
         return self
 
@@ -479,6 +481,10 @@ class Request:
                 raise self._exception
             else:
                 return False
+
+    @property
+    def json(self):
+        return self._json
 
     @property
     def validated_data(self):
