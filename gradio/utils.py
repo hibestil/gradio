@@ -379,6 +379,10 @@ def delete_none(_dict):
 class Http:
     """
     A class that shares an AsyncClient which sends and handles network requests.
+    # TODO : This class will manage Http client instance. We should consider to add functionalities:
+        - a start function to start async client
+        - a close function to close async client
+        - restart function to restart the client
     """
     _client: AsyncClient
 
@@ -394,6 +398,14 @@ class Http:
 
 
 class Request:
+    """ Request class
+        - Manages requests without a context manager
+        - Handles exceptions sliently during the client call
+        - Employs httpx to perform client calls
+        - Includes request method types for ease of usage
+        - Includes validation functionality by models and functions.
+    """
+
     class Method(str, Enum):
         """An enum class that contains the possible types of Request method strings."""
         ANY: str = "*"
@@ -460,6 +472,12 @@ class Request:
     def _create_request(method: Method,
                         url: str,
                         **kwargs):
+        """Create a request. This is a httpx request wrapper function.
+        Args:
+            method(Request.Method): request method type
+            url(str): target url of the request
+            **kwargs
+        """
         request = httpx.Request(method, url, **kwargs)
         return request
 
