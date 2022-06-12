@@ -488,6 +488,10 @@ class Request:
         if self.has_exception:
             raise self._exception
 
+    @property
+    def status(self):
+        return self._status
+
     def is_valid(self, raise_exceptions: bool = False):
         if not self.has_exception:
             return True
