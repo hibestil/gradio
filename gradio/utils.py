@@ -376,6 +376,23 @@ def delete_none(_dict):
     return _dict
 
 
+class Http:
+    """
+    A class that shares an AsyncClient which sends and handles network requests.
+    """
+    _client: AsyncClient
+
+    def __init__(self):
+        self._client = AsyncClient()
+
+    @property
+    def client(self):
+        return self._client
+
+    async def __aexit__(self, *excinfo):
+        await self._client.aclose()
+
+
 class Request:
     class Method(str, Enum):
         ANY: str = "*"
@@ -401,12 +418,15 @@ class Request:
                  exception_class: Type[Exception] = Exception,
                  raise_for_status: bool = False,
                  **kwargs):
-        # Init request params.
+        # Init class attributes.
         self._response = None
         self._exception = None
-        self.status = None
-
-        self.client = AsyncClient()
+        self._status = None
+        self._raise_for_status = raise_for_status
+        self._validation_model = validation_model
+        self._validation_function = validation_function
+        self._exception_class = exception_class
+        # Create request
         self.request = self._create_request(method, url, **kwargs)
         self.raise_for_status = raise_for_status
         self.validation_model = validation_model
@@ -417,15 +437,14 @@ class Request:
     def _create_request(method: Method,
                         url: str,
                         **kwargs):
-        headers = kwargs.pop('headers', {})
-        request = httpx.Request(method, url, headers=headers, **kwargs)
+        request = httpx.Request(method, url, **kwargs)
         return request
 
     def _validate(self, response):
-        if self.validation_model:
-            validated_data = parse_obj_as(self.validation_model, response)
-        elif self.validation_function:
-            validated_data = self.validation_function(response)
+        if self._validation_model:
+            validated_data = parse_obj_as(self._validation_model, response)
+        elif self._validation_function:
+            validated_data = self._validation_function(response)
         else:
             # If there is no validation method, use response
             validated_data = response
@@ -437,18 +456,19 @@ class Request:
         """
         try:
             # Make request call
-            async with httpx.AsyncClient() as client:
+            # TODO : We should move client creation to the outer scope (Block's init). And we must close it properly.
+            async with Http().client as client:
                 response: Response = await client.send(self.request)
-            # Raise for status
-            self.status = response.status_code
-            if self.raise_for_status:
+            # Raise for _status
+            self._status = response.status_code
+            if self._raise_for_status:
                 response.raise_for_status()
             # Parse client response to JSON
             response_json = response.json()
             # Validate data
             self._validated_data = self._validate(response_json)
         except Exception as exception:
-            self._exception = self.exception_class(exception)
+            self._exception = self._exception_class(exception)
         return self
 
     @property

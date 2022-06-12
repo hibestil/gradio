@@ -194,9 +194,8 @@ class TestRequest:
         client_response: Request = await Request(method=Request.Method.GET,
                                                  url="http://headers.jsontest.com/",
                                                  )
-        response = {}
-        if client_response.is_valid():
-            response = client_response.validated_data
+        response = client_response.validated_data
+        assert client_response.is_valid() == True
         assert response["Host"] == "headers.jsontest.com"
 
     @pytest.mark.asyncio
@@ -245,9 +244,8 @@ class TestRequest:
     async def test_validate_with_function(self):
         def has_name(response):
             if response["name"] is not None:
-                if isinstance(response["name"], str):
-                    return response
-            return None
+                return response
+            raise Exception
 
         client_response: Request = await Request(method=Request.Method.POST,
                                                  url="https://reqres.in/api/users",
@@ -257,6 +255,22 @@ class TestRequest:
         assert client_response.is_valid() is True
         assert client_response.validated_data['id'] is not None
         assert client_response.exception is None
+
+    @pytest.mark.asyncio
+    async def test_validate_and_fail_with_function(self):
+        def has_name(response):
+            if response["name"] is not None:
+                if response["name"] == "Alex":
+                    return response
+            raise Exception
+
+        client_response: Request = await Request(method=Request.Method.POST,
+                                                 url="https://reqres.in/api/users",
+                                                 json={"name": "morpheus", "job": "leader"},
+                                                 validation_function=has_name
+                                                 )
+        assert client_response.is_valid() is False
+        assert client_response.exception is not None
 
 
 if __name__ == "__main__":
