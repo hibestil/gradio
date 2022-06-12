@@ -406,9 +406,6 @@ class Request:
         PUT: str = "PUT"
         TRACE: str = "TRACE"
 
-    def __await__(self):
-        return self.__run().__await__()
-
     def __init__(self,
                  method: Method,
                  url: str,
@@ -433,22 +430,8 @@ class Request:
         self.validation_function = validation_function
         self.exception_class = exception_class
 
-    @staticmethod
-    def _create_request(method: Method,
-                        url: str,
-                        **kwargs):
-        request = httpx.Request(method, url, **kwargs)
-        return request
-
-    def _validate(self, response):
-        if self._validation_model:
-            validated_data = parse_obj_as(self._validation_model, response)
-        elif self._validation_function:
-            validated_data = self._validation_function(response)
-        else:
-            # If there is no validation method, use response
-            validated_data = response
-        return validated_data
+    def __await__(self):
+        return self.__run().__await__()
 
     async def __run(self) -> Request:
         """
@@ -471,6 +454,32 @@ class Request:
             self._exception = self._exception_class(exception)
         return self
 
+    @staticmethod
+    def _create_request(method: Method,
+                        url: str,
+                        **kwargs):
+        request = httpx.Request(method, url, **kwargs)
+        return request
+
+    def _validate(self, response):
+        if self._validation_model:
+            validated_data = parse_obj_as(self._validation_model, response)
+        elif self._validation_function:
+            validated_data = self._validation_function(response)
+        else:
+            # If there is no validation method, use response
+            validated_data = response
+        return validated_data
+
+    def is_valid(self, raise_exceptions: bool = False):
+        if not self.has_exception:
+            return True
+        else:
+            if raise_exceptions:
+                raise self._exception
+            else:
+                return False
+
     @property
     def validated_data(self):
         return self._validated_data
@@ -491,12 +500,3 @@ class Request:
     @property
     def status(self):
         return self._status
-
-    def is_valid(self, raise_exceptions: bool = False):
-        if not self.has_exception:
-            return True
-        else:
-            if raise_exceptions:
-                raise self._exception
-            else:
-                return False
